@@ -1,0 +1,11 @@
+{
+  "status_column": "Status",
+  "resolution_column": "Resolution",
+  "to_be_reviewed": { "statuses": ["Not started"] },
+  "in_progress": {
+    "statuses": ["In Analysis", "On Hold", "In Testing", "In Development", "In Review"],
+    "resolutions": ["", "Unresolved"]
+  },
+  "done": { "statuses": ["Done"] },
+  "excluded_statuses": ["Obsolete"]
+}
