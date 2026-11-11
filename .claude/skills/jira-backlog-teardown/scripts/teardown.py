@@ -75,6 +75,7 @@ def main(path, as_json=False, out_path=None):
         "in_progress_by_priority": prio,
         "in_progress_unmapped_priority": unmapped,
         "excluded": counts["excluded"],
+        "not_in_buckets": counts["excluded"] + n_unc,
         "unclassified": n_unc,
         "unclassified_by_status_resolution": {f"{s} | {r or '(blank)'}": n for (s, r), n in unclassified.most_common()},
         "reconciles": counts["to_be_reviewed"] + counts["in_progress"] + counts["done"] + counts["excluded"] + n_unc == total,
@@ -91,6 +92,7 @@ def main(path, as_json=False, out_path=None):
     if unmapped:
         print(f"    UNMAPPED priority values (not in config): {unmapped}")
     print(f"Done:           {out['done']}")
+    print(f"Not in the three buckets: {out['not_in_buckets']}")
     print(f"Excluded ({', '.join(cfg['excluded_statuses'])}): {out['excluded']}")
     print(f"Unclassified:   {n_unc}")
     for k, n in out["unclassified_by_status_resolution"].items():
