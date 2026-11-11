@@ -31,19 +31,23 @@ To also get the data with the new column added, pass `--out <path>.csv` (keep th
 
 ## Report to the user
 
-Report exactly this, with the numbers from the script and nothing else (no excluded, unclassified or reconciliation lines):
+Report exactly this, with the numbers from the script. The three buckets do not add up to the total, and the last two lines say why:
 
 > **Backlog teardown (<total_rows> tickets)**
 > - To be reviewed: **<to_be_reviewed>**
 > - In progress: **<in_progress>** (<status>: <n>, ... in descending order)
 >   - P0: <n> · P1: <n> · P2: <n> · Lower priority: <n>
 > - Done: **<done>**
+>
+> The three buckets total <sum of the three>. The remaining <not_in_buckets> tickets are not in any bucket:
+> - Obsolete (excluded): <excluded>
+> - Other statuses not mapped to a bucket: <unclassified> (<status>: <n>, ... in descending order)
 
-Only deviate from this format in these cases:
-- The script errors (for example a missing column) or `reconciles` is false: report that and stop.
-- `in_progress_unmapped_priority` is non-empty: add one line naming the unmapped Priority values and ask before extending the map.
-
-The script's full output still lists excluded and unclassified rows if the user asks for it.
+Rules:
+- Numbers come from the script's `--json` output; do not compute them by hand. <sum of the three> is `to_be_reviewed + in_progress + done`, and it plus `not_in_buckets` must equal `total_rows`.
+- Take the unclassified statuses from `unclassified_by_status_resolution`, showing the status name only (drop the "| (blank)" resolution suffix). If a status appears with a non-blank resolution, show it as `<status> / <resolution>`. If `unclassified` is 0, omit the last bullet.
+- If the script errors (for example a missing column) or `reconciles` is false, report that and stop.
+- If `in_progress_unmapped_priority` is non-empty, add one line naming the unmapped Priority values and ask before extending the map.
 
 To change a mapping, edit `config.json` only after the user confirms.
 
