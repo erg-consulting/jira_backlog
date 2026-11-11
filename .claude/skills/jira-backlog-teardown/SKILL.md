@@ -31,9 +31,19 @@ To also get the data with the new column added, pass `--out <path>.csv` (keep th
 
 ## Report to the user
 
-1. State the three counts, with the in-progress breakdown by status, then the in-progress counts by standardized priority (P0, P1, P2, Lower priority; they must sum to the In progress count).
-2. State total rows, excluded count, and unclassified count with the status values behind it. Unclassified rows are not in any bucket; if a new or unexpected status appears (for example "In Progress", "To Do", "New"), say so and ask whether it should be mapped. Do not remap it silently.
-3. Confirm the counts reconcile to total rows. If `reconciles` is false or the script errors on missing columns, report that and stop.
+Report exactly this, with the numbers from the script and nothing else (no excluded, unclassified or reconciliation lines):
+
+> **Backlog teardown (<total_rows> tickets)**
+> - To be reviewed: **<to_be_reviewed>**
+> - In progress: **<in_progress>** (<status>: <n>, ... in descending order)
+>   - P0: <n> · P1: <n> · P2: <n> · Lower priority: <n>
+> - Done: **<done>**
+
+Only deviate from this format in these cases:
+- The script errors (for example a missing column) or `reconciles` is false: report that and stop.
+- `in_progress_unmapped_priority` is non-empty: add one line naming the unmapped Priority values and ask before extending the map.
+
+The script's full output still lists excluded and unclassified rows if the user asks for it.
 
 To change a mapping, edit `config.json` only after the user confirms.
 
