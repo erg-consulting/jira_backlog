@@ -24,7 +24,7 @@ The script:
 
 ## Report to the user
 
-Use the script's output. Give:
+Use the script's output. Always deliver the PowerPoint table: send `<output>_slide_table.html` to the user with SendUserFile (display: render, so it shows in the preview window) and attach the .xlsx (display: attach) in the same reply as the report. Never end the reply with only text. Give:
 1. The ticket count for each segment ("Open & groomed" tickets carrying that BU label).
 2. Tickets with more than one BU label: key, labels, and whether the ticket is Open & groomed (only those appear in the summary, once per label).
 3. Values that did not map cleanly: Priority values not in the map (shown as `UNMAPPED`) and blank priorities among open tickets; BU labels not in the segment lookup, with how many tickets carry them; labels cleaned of stray characters or in the wrong case; statuses with stray whitespace or a near-miss of the excluded status (and how many rows match the excluded status exactly); Created values that could not be parsed; rows whose key does not start with the project prefix; open tickets with no BU label.
