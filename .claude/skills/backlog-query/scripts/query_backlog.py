@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[4]
 HIST = ROOT / "backlog_history"
 TELE = json.loads((ROOT / ".claude/skills/jira-backlog-teardown/config.json").read_text())
 norm = lambda s: (s or "").strip().lower()
-TS = re.compile(r"(\d{4}-\d{2}-\d{2})T(\d{2})[_:](\d{2})")
+TS = re.compile(r"(\d{4}-\d{2}-\d{2})T(\d{2})[_:]?(\d{2})")
 
 
 def snap_time(p):
