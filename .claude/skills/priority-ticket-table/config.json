@@ -36,7 +36,8 @@
   "parameters": {
     "project_prefix": "AISDLC",
     "excluded_status": "Not started",
-    "tickets_per_segment": 5
+    "tickets_per_segment": 5,
+    "always_list_through": "P1"
   },
   "segments": [
     [
