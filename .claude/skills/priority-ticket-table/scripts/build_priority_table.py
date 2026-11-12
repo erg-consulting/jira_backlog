@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the Dev Priorities summary in a Jira backlog workbook (live formulas only).
 
-Usage: build_priority_table.py <workbook.xlsx | export.csv> [--out OUT.xlsx | --in-place] [--sheet NAME] [--no-verify] [--json]
+Usage: build_priority_table.py <workbook.xlsx | export.csv> [--out OUT.xlsx | --in-place] [--template DECK.pptx] [--sheet NAME] [--no-verify] [--json]
 Default output: <input>_priorities.xlsx (the input is never modified unless --in-place; --in-place is not allowed for a CSV).
 A CSV is first opened as a workbook in the expected column layout (see csv_to_workbook), then processed as below.
 """
@@ -467,10 +467,126 @@ def csv_to_workbook(csv_path, xlsx_path):
     return rep
 
 
+# ---------- PowerPoint output: the same summary table on one or more slides ----------
+def build_slides(path, template, segs, exp, notes, params, n_rows, no_bu_open):
+    """Write the Dev Priorities summary (Segment, Total, Priority breakdown, ticket lines, notes) to a .pptx.
+
+    Segments are packed onto as few slides as fit (usually one or two). With a template, its master, layout and theme
+    are used (all template slides are dropped); without one, python-pptx's default 16:9 master is used. The values come
+    from the independent Python calculation that the workbook formulas are cross-checked against.
+    """
+    import math
+    from pptx import Presentation
+    from pptx.util import Emu, Pt
+    from pptx.dml.color import RGBColor
+    from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
+    from lxml import etree
+    A = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
+    sc = CFG["slide"]; col = sc["colors"]
+    prs = Presentation(template) if template else Presentation()
+    if not template:
+        prs.slide_width, prs.slide_height = Emu(12192000), Emu(6858000)
+    for sid in list(prs.slides._sldIdLst):  # drop the template's own slides completely (relationship + part)
+        prs.part.drop_rel(sid.rId); prs.slides._sldIdLst.remove(sid)
+    layouts = [l for m in prs.slide_masters for l in m.slide_layouts]
+    layout = next((l for l in layouts if l.name == sc["layout"]), None)
+    if layout is None and not template:
+        layout = prs.slide_layouts[5]
+    if layout is None:
+        sys.exit(f"ERROR: layout '{sc['layout']}' not found in the template; layouts: {sorted({l.name for l in layouts})}")
+    W_ = prs.slide_width
+    L, TOP, W = 338328, 1000813, W_ - 2 * 338328
+    NOTE_TOP = prs.slide_height - 1000000
+    avail = NOTE_TOP - TOP - 120000 - 300000        # height for body rows under the header row
+    has_notes = any(str(notes.get(s) or "").strip() for s, _ in segs)
+    w_seg, w_tot, w_brk, w_notes = 1150000, 800000, 1500000, (2300000 if has_notes else 0)
+    w_tix = W - w_seg - w_tot - w_brk - w_notes
+    cpl = int(w_tix / 914400 * 17)                   # ~characters per line at 8 pt
+    LH, PAD = 122000, 70000
+    def lines_of(e):
+        return max(sum(max(1, math.ceil(len(t) / cpl)) for t in e["top"]) if e["top"] else 1, len(e["breakdown"].split("\n")))
+    pages, cur, used = [], [], 0
+    for s, lab in segs:
+        h = lines_of(exp[s]) * LH + PAD
+        if cur and used + h > avail:
+            pages.append(cur); cur, used = [], 0
+        cur.append((s, lab, h)); used += h
+    pages.append(cur)
+
+    def fixp(p):
+        pPr = p._p.get_or_add_pPr(); pPr.set("marL", "0"); pPr.set("indent", "0")
+        for ch in list(pPr): pPr.remove(ch)
+        etree.SubElement(etree.SubElement(pPr, A + "lnSpc"), A + "spcPct", val="100000")
+        for tg in ("spcBef", "spcAft"):
+            etree.SubElement(etree.SubElement(pPr, A + tg), A + "spcPts", val="0")
+        etree.SubElement(pPr, A + "buNone")
+    def cell(c, lines, size, bold, color, align, fill):
+        c.margin_left = c.margin_right = Emu(54864); c.margin_top = c.margin_bottom = Emu(13716)
+        c.vertical_anchor = MSO_ANCHOR.MIDDLE
+        c.text_frame.word_wrap = True
+        for i, (tx, sz, b, colr, it) in enumerate(lines if isinstance(lines[0], tuple) else [(t, size, bold, color, False) for t in lines]):
+            p = c.text_frame.paragraphs[0] if i == 0 else c.text_frame.add_paragraph()
+            p.alignment = align
+            r = p.add_run(); r.text = tx; r.font.size = Pt(sz); r.font.bold = b; r.font.italic = it
+            r.font.color.rgb = RGBColor.from_string(colr)
+            fixp(p)
+        c.fill.solid(); c.fill.fore_color.rgb = RGBColor.from_string(fill)
+        tcPr = c._tc.get_or_add_tcPr()
+        for k, tag in enumerate(("lnL", "lnR", "lnT", "lnB")):
+            ln = etree.Element(A + tag, w="12700", cap="flat", cmpd="sng", algn="ctr")
+            etree.SubElement(etree.SubElement(ln, A + "solidFill"), A + "srgbClr", val="FFFFFF")
+            etree.SubElement(ln, A + "prstDash", val="solid"); tcPr.insert(k, ln)
+
+    pm = CFG["priority_map"]
+    note = (f"Note: Open = {params['project_prefix']} tickets with Resolution unresolved and Status other than {params['excluded_status']}, "
+            f"carrying the segment's BU label. Each list holds every ticket at {params[PRIO_KEY]} or higher, ranked by priority and then newest first, "
+            f"topped up to {params['tickets_per_segment']} tickets; the breakdown counts all open tickets in the segment. "
+            f"Tickets with several BU labels count in each segment. {no_bu_open} open tickets carry no BU label and are not shown. "
+            "Ticket titles are quoted as written in Jira.")
+    src_line = f"Source: Jira backlog export ({n_rows} issues)"
+    for pi, page in enumerate(pages, 1):
+        sl = prs.slides.add_slide(layout)
+        t = sl.shapes.title; tf = t.text_frame; tf.clear(); p = tf.paragraphs[0]
+        r = p.add_run(); r.text = sc["title_lead"] + " | "; r.font.bold = True; r.font.size = Pt(28)
+        tail = sc["title_tail"] + (f" ({pi} of {len(pages)})" if len(pages) > 1 else "")
+        r = p.add_run(); r.text = tail; r.font.size = Pt(28)
+        t.left, t.top, t.width, t.height = Emu(330200), Emu(476191), Emu(W_ - 660400), Emu(400110)
+        heads = ["Segment", "Total tickets", "Priority breakdown", "Highest priority associated tickets with owners (groomed only)"]
+        widths = [w_seg, w_tot, w_brk, w_tix]
+        if has_notes:
+            heads.append("Recent notes/updates"); widths.append(w_notes)
+        H = 300000 + sum(h for _, _, h in page)
+        gf = sl.shapes.add_table(len(page) + 1, len(heads), Emu(L), Emu(TOP), Emu(W), Emu(H)); gf.name = "Priority tickets table"
+        tb = gf.table
+        for a_ in ("firstRow", "bandRow"): tb._tbl.tblPr.attrib.pop(a_, None)
+        for i, w in enumerate(widths): tb.columns[i].width = Emu(w)
+        tb.rows[0].height = Emu(300000)
+        for j, h in enumerate(heads):
+            cell(tb.cell(0, j), [h], 10, True, "FFFFFF", PP_ALIGN.CENTER if j in (1, 2) else PP_ALIGN.LEFT, col["header_fill"])
+        for i, (s, lab, h) in enumerate(page, 1):
+            e = exp[s]; tb.rows[i].height = Emu(h)
+            cell(tb.cell(i, 0), [(s, 9, True, col["text"], False), (lab, 7, False, "595959", True)], 9, True, col["text"], PP_ALIGN.LEFT, col["label_fill"])
+            cell(tb.cell(i, 1), [str(e["total"])], 9, False, col["text"], PP_ALIGN.CENTER, col["body_fill"])
+            cell(tb.cell(i, 2), e["breakdown"].split("\n"), 8, False, col["text"], PP_ALIGN.LEFT, col["body_fill"])
+            cell(tb.cell(i, 3), e["top"] or ["(none)"], 8, False, col["text"], PP_ALIGN.LEFT, col["body_fill"])
+            if has_notes:
+                cell(tb.cell(i, 4), [str(notes.get(s) or "")] , 8, False, col["text"], PP_ALIGN.LEFT, col["body_fill"])
+        nb = sl.shapes.add_textbox(Emu(L), Emu(NOTE_TOP), Emu(W), Emu(492443)); nb.name = "Note and source"
+        ntf = nb.text_frame; ntf.word_wrap = True
+        ntf.margin_left = ntf.margin_right = ntf.margin_top = ntf.margin_bottom = 0
+        for i, x in enumerate((note, src_line)):
+            p = ntf.paragraphs[0] if i == 0 else ntf.add_paragraph()
+            r = p.add_run(); r.text = x; r.font.size = Pt(8); r.font.bold = False; r.font.color.rgb = RGBColor.from_string(col["text"])
+            fixp(p)
+    prs.save(path)
+    return len(pages)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("workbook"); ap.add_argument("--out"); ap.add_argument("--in-place", action="store_true")
     ap.add_argument("--sheet"); ap.add_argument("--no-verify", action="store_true"); ap.add_argument("--json", action="store_true")
+    ap.add_argument("--template", help="PowerPoint deck whose master/layout/theme style the slides (its own slides are not copied)")
     a = ap.parse_args()
     src = Path(a.workbook)
     conversion = None
@@ -519,14 +635,17 @@ def main():
     check = ["skipped (--no-verify)"] if a.no_verify else recalc_check(out, ws.title, dws.title, rows, exp, segs, hdr)
     slide = out.with_name(out.stem + "_slide_table.html")
     slide_html(slide, segs, exp, {k: v for k, v in st["notes"].items() if isinstance(k, str)}, params)
-    result = dict(output=str(out), slide_table=str(slide), manual_rows_kept=st.get("kept_manual", []),
+    pptx = out.with_name(out.stem + "_slides.pptx")
+    notes_ = {k: v for k, v in st["notes"].items() if isinstance(k, str)}
+    n_slides = build_slides(pptx, a.template, segs, exp, notes_, params, last - 1, fl["open_groomed_without_bu_label"])
+    result = dict(output=str(out), slide_table=str(slide), slides=str(pptx), slide_count=n_slides, manual_rows_kept=st.get("kept_manual", []),
                   manual_rows_dropped_empty=st.get("dropped_manual", []), source_sheet=ws.title, last_data_row=last, parameters=params,
                   segment_counts={s: e["total"] for s, e in exp.items()},
                   priority_breakdown={s: e["by_priority"] for s, e in exp.items()},
                   tickets_listed={s: e["n_show"] for s, e in exp.items()}, csv_conversion=conversion, flags=fl, formula_check=check)
     if a.json:
         print(json.dumps(result, indent=2, default=str)); return
-    print(f"Output: {out}\nSlide table (copy/paste into PowerPoint): {slide}\nSource sheet: {ws.title} (rows 2-{last}); source columns A-Q confirmed and unchanged")
+    print(f"Output: {out}\nSlides (.pptx, {n_slides}): {pptx}\nSlide table (HTML, copy/paste into PowerPoint): {slide}\nSource sheet: {ws.title} (rows 2-{last}); source columns A-Q confirmed and unchanged")
     if conversion:
         print(f"CSV opened as a workbook: {conversion['rows_written']} rows, {conversion['label_columns_found']} Labels column(s) found; "
               f"{conversion['unresolved_blanked']} 'Unresolved' resolutions written as blank; "

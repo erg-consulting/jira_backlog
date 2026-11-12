@@ -65,5 +65,16 @@
       "BU_NI_IP"
     ]
   ],
-  "dev_priorities_sheet": "Dev Priorities"
+  "dev_priorities_sheet": "Dev Priorities",
+  "slide": {
+    "layout": "Title Only",
+    "title_lead": "Jira backlog",
+    "title_tail": "Highest-priority open tickets by segment",
+    "colors": {
+      "header_fill": "005AFF",
+      "label_fill": "D9E3FA",
+      "body_fill": "F2F2F2",
+      "text": "001135"
+    }
+  }
 }
