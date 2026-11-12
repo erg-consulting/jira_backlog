@@ -210,17 +210,17 @@ def write_dev(wb, st, n_last_src):
         for c in range(1, 6):
             style(ws.cell(r, c), BLUE if c == 5 else BLACK)
         ws.row_dimensions[r].height = height
-    manual = list(st["manual"].keys()) or []
-    for m_ in CFG["manual_rows"]:
-        if m_ not in manual:
-            manual.append(m_)
+    # No default manual rows. Rows the user added below the table are kept only if they hold typed content.
+    manual = [k for k, vals in st["manual"].items() if any(v not in (None, "") for v in vals)]
     for k, mname in enumerate(manual):
         r = hdr + 1 + n + k
         ws.cell(r, 1).value = mname; style(ws.cell(r, 1), BLUE)
-        vals = st["manual"].get(mname, [None] * 4)
+        vals = st["manual"][mname]
         for c in range(2, 6):
             ws.cell(r, c).value = vals[c - 2]; style(ws.cell(r, c), BLUE)
         ws.row_dimensions[r].height = 36
+    st["kept_manual"] = manual
+    st["dropped_manual"] = [k for k in st["manual"] if k not in manual]
     for col, w in {"A": 30, "B": 38, "C": 20, "D": 95, "E": 55}.items():
         ws.column_dimensions[col].width = w
     ws.freeze_panes = None
@@ -348,6 +348,27 @@ def recalc_check(out_path, ws_name, dp_name, rows, exp, segs, hdr):
     return bad
 
 
+def slide_html(path, segs, exp, notes, params):
+    """Standalone HTML with one inline-styled table, for copy/paste into PowerPoint."""
+    from html import escape
+    th = "background:#D9D9D9;font-weight:bold;border:1px solid #808080;padding:4px 6px;text-align:left;vertical-align:top;font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#000000"
+    td = "border:1px solid #808080;padding:4px 6px;text-align:left;vertical-align:top;font-family:Calibri,Arial,sans-serif;font-size:10pt;color:#000000"
+    def cell(text, style_):
+        return f'<td style="{style_}">' + "<br>".join(escape(t) for t in str(text or "").split("\n")) + "</td>"
+    heads = ["Segment", "Description", "Total tickets", "Highest priority associated tickets with owners (groomed only)", "Recent notes/updates"]
+    rows = ["<tr>" + "".join(f'<th style="{th}">{escape(h)}</th>' for h in heads) + "</tr>"]
+    for s, lab in segs:
+        e = exp[s]
+        desc = (f"Project = {params['project_prefix']}\nResolution = Unresolved\nLabels = {lab}\nStatus != {params['excluded_status']}")
+        rows.append("<tr>" + cell(s, td + ";font-weight:bold") + cell(desc, td) + cell(f"{e['total']} total tickets", td)
+                    + cell("\n".join(e["top"]), td) + cell(notes.get(s), td) + "</tr>")
+    doc = ('<!doctype html><html><head><meta charset="utf-8"><title>Dev Priorities - slide table</title></head>'
+           '<body style="margin:16px;background:#ffffff"><p style="font-family:Calibri,Arial,sans-serif;font-size:10pt;color:#555555">'
+           'Select the table, copy, and paste into PowerPoint (Keep Source Formatting keeps the grey header).</p>'
+           '<table style="border-collapse:collapse;width:100%">' + "".join(rows) + "</table></body></html>")
+    Path(path).write_text(doc, encoding="utf-8")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("workbook"); ap.add_argument("--out"); ap.add_argument("--in-place", action="store_true")
@@ -385,14 +406,21 @@ def main():
     rows, exp = expected(ws, last, params, segs)
     fl = flags(rows, segs, params)
     check = ["skipped (--no-verify)"] if a.no_verify else recalc_check(out, ws.title, dws.title, rows, exp, segs, hdr)
-    result = dict(output=str(out), source_sheet=ws.title, last_data_row=last, parameters=params,
+    slide = out.with_name(out.stem + "_slide_table.html")
+    slide_html(slide, segs, exp, {k: v for k, v in st["notes"].items() if isinstance(k, str)}, params)
+    result = dict(output=str(out), slide_table=str(slide), manual_rows_kept=st.get("kept_manual", []),
+                  manual_rows_dropped_empty=st.get("dropped_manual", []), source_sheet=ws.title, last_data_row=last, parameters=params,
                   segment_counts={s: e["total"] for s, e in exp.items()}, flags=fl, formula_check=check)
     if a.json:
         print(json.dumps(result, indent=2, default=str)); return
-    print(f"Output: {out}\nSource sheet: {ws.title} (rows 2-{last}); source columns A-Q confirmed and unchanged")
+    print(f"Output: {out}\nSlide table (copy/paste into PowerPoint): {slide}\nSource sheet: {ws.title} (rows 2-{last}); source columns A-Q confirmed and unchanged")
     print("Tickets per segment (Open & groomed):")
     for s, e in exp.items():
         print(f"  {s} ({e['label']}): {e['total']}")
+    if st.get("kept_manual"):
+        print(f"Extra rows you typed below the table were kept: {st['kept_manual']}")
+    if st.get("dropped_manual"):
+        print(f"Empty extra rows removed from the tab: {st['dropped_manual']}")
     print("Flags:")
     for k, v in fl.items():
         print(f"  {k}: {v}")

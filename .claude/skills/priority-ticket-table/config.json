@@ -1,11 +1,36 @@
 {
   "source_columns": {
-    "A": "Assignee", "C": "Created", "D": "Labels", "E": "Labels", "F": "Labels",
-    "G": "Labels", "H": "Labels", "I": "Labels", "J": "Status", "K": "Priority",
-    "M": "Issue key", "P": "Summary", "Q": "Resolution"
+    "A": "Assignee",
+    "C": "Created",
+    "D": "Labels",
+    "E": "Labels",
+    "F": "Labels",
+    "G": "Labels",
+    "H": "Labels",
+    "I": "Labels",
+    "J": "Status",
+    "K": "Priority",
+    "M": "Issue key",
+    "P": "Summary",
+    "Q": "Resolution"
   },
   "priority_map": [
-    ["Highest", "P0"], ["High", "P1"], ["Medium", "P2"], ["Low", "Lower priority"]
+    [
+      "Highest",
+      "P0"
+    ],
+    [
+      "High",
+      "P1"
+    ],
+    [
+      "Medium",
+      "P2"
+    ],
+    [
+      "Low",
+      "Lower priority"
+    ]
   ],
   "segment_label_prefix": "BU_",
   "parameters": {
@@ -14,9 +39,30 @@
     "tickets_per_segment": 5
   },
   "segments": [
-    ["NI ON", "BU_NI_ON"], ["MI Core", "BU_CN"], ["MI AN", "BU_AN"],
-    ["MI RAN", "BU_RAN"], ["NI FN", "BU_NI_FN"], ["NI IP", "BU_NI_IP"]
+    [
+      "NI ON",
+      "BU_NI_ON"
+    ],
+    [
+      "MI Core",
+      "BU_CN"
+    ],
+    [
+      "MI AN",
+      "BU_AN"
+    ],
+    [
+      "MI RAN",
+      "BU_RAN"
+    ],
+    [
+      "NI FN",
+      "BU_NI_FN"
+    ],
+    [
+      "NI IP",
+      "BU_NI_IP"
+    ]
   ],
-  "manual_rows": ["Multi-repo / multi-team", "Hackathon feedback"],
   "dev_priorities_sheet": "Dev Priorities"
 }
